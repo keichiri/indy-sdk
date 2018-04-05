@@ -2,7 +2,7 @@ package indy
 
 /*
 #include <stdint.h>
-void indy_create_and_store_my_did_proxy(void *, int32_t, char *);
+void indy_create_and_store_my_did_proxy(void *, int32_t, int32_t, char *);
 */
 import "C"
 
@@ -17,7 +17,7 @@ func CreateAndStoreMyDid(walletHandle int32, did string) (string, string, error)
 		return "", "", err
 	}
 
-	C.indy_create_and_store_my_did_proxy(pointer, C.int32_t(handle), C.CString(did))
+	C.indy_create_and_store_my_did_proxy(pointer, C.int32_t(handle), C.int32_t(walletHandle), C.CString(did))
 	_res := <-resCh
 	res := _res.(*createAndStoreMyDidResult)
 	if res.code != 0 {

@@ -19,15 +19,15 @@ func BuildNymRequest(submitterDID, targetDID, verKey, alias, role string) (strin
 	var c_verkey, c_alias, c_role *C.char
 	if verKey != "" {
 		c_verkey = C.CString(verKey)
-		defer C.free(c_verkey)
+		// defer C.free(c_verkey)
 	}
 	if alias != "" {
 		c_alias = C.CString(alias)
-		defer C.free(c_alias)
+		// defer C.free(c_alias)
 	}
 	if role != "" {
 		c_role = C.CString(role)
-		defer C.free(c_role)
+		// defer C.free(c_role)
 	}
 
 	pointer, handle, resCh, err := resolver.RegisterCall("indy_build_nym_request")

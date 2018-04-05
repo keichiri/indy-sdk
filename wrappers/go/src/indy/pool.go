@@ -24,11 +24,11 @@ func CreatePoolLedgerConfig(configName, config string) error {
 
 	var c_config_name, c_config *C.char
 	c_config_name = C.CString(configName)
-	defer C.free(c_config_name)
+	// defer C.free(c_config_name)
 
 	if config != "" {
 		c_config = C.CString(config)
-		defer C.free(c_config)
+		// defer C.free(c_config)
 	}
 
 	C.indy_create_pool_ledger_config_proxy(pointer, C.int32_t(handle), c_config_name, c_config)
@@ -65,11 +65,11 @@ func OpenPoolLedger(configName, config string) (int32, error) {
 
 	var c_config_name, c_config *C.char
 	c_config_name = C.CString(configName)
-	defer C.free(c_config_name)
+	// defer C.free(c_config_name)
 
 	if config != "" {
 		c_config = C.CString(config)
-		defer C.free(c_config)
+		// defer C.free(c_config)
 	}
 
 	C.indy_open_pool_ledger_proxy(pointer, C.int32_t(handle), c_config_name, c_config)
@@ -91,7 +91,7 @@ func openPoolLedgerCallback(commandHandle, code, poolHandle int32) {
 		return
 	}
 
-	resCh <- openPoolLedgerResult{code, poolHandle}
+	resCh <- &openPoolLedgerResult{code, poolHandle}
 }
 
 // func RefreshPoolLedger(poolHandle int32) error {
