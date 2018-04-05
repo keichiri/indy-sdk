@@ -4,6 +4,7 @@ extern void buildNymRequestCallback(int32_t, int32_t, char *);
 extern void signAndSubmitRequestCallback(int32_t, int32_t, char *);
 extern void buildGetNymRequestCallback(int32_t, int32_t, char *);
 extern void submitRequestCallback(int32_t, int32_t, char *);
+extern void buildSchemaRequestCallback(int32_t, int32_t, char *);
 
 
 void indy_build_nym_request_proxy(void *f, int32_t handle, char *submitter, char *target,
@@ -29,4 +30,10 @@ void indy_build_get_nym_request_proxy(void *f, int32_t handle, char *submitter, 
 void indy_submit_request_proxy(void *f, int32_t handle, int32_t pool_handle, char *request_json) {
     void (*func)(int32_t, int32_t, char *, void *) = f;
     func(handle, pool_handle, request_json, &submitRequestCallback);
+}
+
+
+void indy_build_schema_request_proxy(void *f, int32_t handle, char *submitter_did, char *data) {
+    void (*func)(int32_t, char *, char *, void *) = f;
+    func(handle, submitter_did, data, &buildSchemaRequestCallback);
 }

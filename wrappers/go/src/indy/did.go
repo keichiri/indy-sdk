@@ -2,6 +2,7 @@ package indy
 
 /*
 #include <stdint.h>
+#include <stdlib.h>
 void indy_create_and_store_my_did_proxy(void *, int32_t, int32_t, char *);
 */
 import "C"
@@ -9,6 +10,7 @@ import "C"
 import (
 	"fmt"
 	"log"
+	"unsafe"
 )
 
 func CreateAndStoreMyDid(walletHandle int32, did string) (string, string, error) {
@@ -17,7 +19,10 @@ func CreateAndStoreMyDid(walletHandle int32, did string) (string, string, error)
 		return "", "", err
 	}
 
-	C.indy_create_and_store_my_did_proxy(pointer, C.int32_t(handle), C.int32_t(walletHandle), C.CString(did))
+	c_did := C.CString(did)
+	defer C.free(unsafe.Pointer(c_did))
+
+	C.indy_create_and_store_my_did_proxy(pointer, C.int32_t(handle), C.int32_t(walletHandle), c_did)
 	_res := <-resCh
 	res := _res.(*createAndStoreMyDidResult)
 	if res.code != 0 {
@@ -35,16 +40,15 @@ type createAndStoreMyDidResult struct {
 
 //export createAndStoreMyDidCallback
 func createAndStoreMyDidCallback(commandHandle, code int32, did *C.char, verkey *C.char) {
-	ch, err := resolver.DeregisterCall(commandHandle)
+	resCh, err := resolver.DeregisterCall(commandHandle)
 	if err != nil {
 		log.Printf("ERROR: invalid handle in callback.\n")
 		return
 	}
 
-	res := &createAndStoreMyDidResult{
+	resCh <- &createAndStoreMyDidResult{
 		code:   code,
 		did:    C.GoString(did),
 		verkey: C.GoString(verkey),
 	}
-	ch <- res
 }

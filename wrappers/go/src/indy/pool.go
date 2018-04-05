@@ -14,6 +14,7 @@ import "C"
 import (
 	"fmt"
 	"log"
+	"unsafe"
 )
 
 func CreatePoolLedgerConfig(configName, config string) error {
@@ -24,11 +25,11 @@ func CreatePoolLedgerConfig(configName, config string) error {
 
 	var c_config_name, c_config *C.char
 	c_config_name = C.CString(configName)
-	// defer C.free(c_config_name)
+	defer C.free(unsafe.Pointer(c_config_name))
 
 	if config != "" {
 		c_config = C.CString(config)
-		// defer C.free(c_config)
+		defer C.free(unsafe.Pointer(c_config))
 	}
 
 	C.indy_create_pool_ledger_config_proxy(pointer, C.int32_t(handle), c_config_name, c_config)
@@ -65,11 +66,11 @@ func OpenPoolLedger(configName, config string) (int32, error) {
 
 	var c_config_name, c_config *C.char
 	c_config_name = C.CString(configName)
-	// defer C.free(c_config_name)
+	defer C.free(unsafe.Pointer(c_config_name))
 
 	if config != "" {
 		c_config = C.CString(config)
-		// defer C.free(c_config)
+		defer C.free(unsafe.Pointer(c_config))
 	}
 
 	C.indy_open_pool_ledger_proxy(pointer, C.int32_t(handle), c_config_name, c_config)
@@ -130,13 +131,13 @@ func ClosePoolLedger(poolHandle int32) error {
 
 //export closePoolLedgerCallback
 func closePoolLedgerCallback(commandHandle int32, code int32) {
-	ch, err := resolver.DeregisterCall(commandHandle)
+	resCh, err := resolver.DeregisterCall(commandHandle)
 	if err != nil {
 		log.Printf("ERROR: invalid handle in callback.\n")
 		return
 	}
 
-	ch <- code
+	resCh <- code
 }
 
 // indy_delete_pool_ledger_config
@@ -145,8 +146,10 @@ func DeletePoolLedgerConfig(poolName string) error {
 	if err != nil {
 		return err
 	}
+	c_pool_name := C.CString(poolName)
+	defer C.free(unsafe.Pointer(c_pool_name))
 
-	C.indy_delete_pool_ledger_config_proxy(pointer, C.int32_t(handle), C.CString(poolName))
+	C.indy_delete_pool_ledger_config_proxy(pointer, C.int32_t(handle), c_pool_name)
 	_res := <-resCh
 	res := _res.(int32)
 	if res != 0 {
@@ -158,11 +161,11 @@ func DeletePoolLedgerConfig(poolName string) error {
 
 //export deletePoolLedgerConfigCallback
 func deletePoolLedgerConfigCallback(commandHandle int32, code int32) {
-	ch, err := resolver.DeregisterCall(commandHandle)
+	resCh, err := resolver.DeregisterCall(commandHandle)
 	if err != nil {
 		log.Printf("ERROR: invalid handle in callback.\n")
 		return
 	}
 
-	ch <- code
+	resCh <- code
 }

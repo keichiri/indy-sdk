@@ -2,6 +2,7 @@ package indy
 
 /*
 #include <stdint.h>
+#include <stdlib.h>
 void indy_create_wallet_proxy(void *, int32_t, char *, char *, char *, char *, char *);
 void indy_open_wallet_proxy(void *, int32_t, char *, char *, char *);
 void indy_close_wallet_proxy(void *, int32_t, int32_t);
@@ -12,6 +13,7 @@ import "C"
 import (
 	"fmt"
 	"log"
+	"unsafe"
 )
 
 func CreateWallet(poolName, name, xtype, config, credentials string) error {
@@ -20,18 +22,25 @@ func CreateWallet(poolName, name, xtype, config, credentials string) error {
 		return err
 	}
 
-	var c_xtype, c_config, c_credentials *C.char
+	var c_pool_name, c_name, c_xtype, c_config, c_credentials *C.char
+	c_pool_name = C.CString(poolName)
+	defer C.free(unsafe.Pointer(c_pool_name))
+	c_name = C.CString(name)
+	defer C.free(unsafe.Pointer(c_name))
 	if xtype != "" {
 		c_xtype = C.CString(xtype)
+		defer C.free(unsafe.Pointer(c_xtype))
 	}
 	if config != "" {
 		c_config = C.CString(config)
+		defer C.free(unsafe.Pointer(c_config))
 	}
 	if credentials != "" {
 		c_credentials = C.CString(credentials)
+		defer C.free(unsafe.Pointer(c_credentials))
 	}
 
-	C.indy_create_wallet_proxy(pointer, C.int32_t(handle), C.CString(poolName), C.CString(name),
+	C.indy_create_wallet_proxy(pointer, C.int32_t(handle), c_pool_name, c_name,
 		c_xtype, c_config, c_credentials)
 
 	_res := <-resCh
@@ -45,14 +54,12 @@ func CreateWallet(poolName, name, xtype, config, credentials string) error {
 
 //export createWalletCallback
 func createWalletCallback(commandHandle, code int32) {
-	log.Printf("In createWalletCallback. Command Handle: %d. Code: %d\n", commandHandle, code)
-	ch, err := resolver.DeregisterCall(commandHandle)
+	resCh, err := resolver.DeregisterCall(commandHandle)
 	if err != nil {
 		panic("Received invalid handle in callback")
 	}
 
-	ch <- code
-	close(ch)
+	resCh <- code
 }
 
 type openWalletResult struct {
@@ -61,14 +68,16 @@ type openWalletResult struct {
 }
 
 func OpenWallet(name string, runtimeConfig string, credentials string) (int32, error) {
-	var c_runtimeConfig *C.char
+	var c_name, c_runtime_config, c_credentials *C.char
+	c_name = C.CString(name)
+	defer C.free(unsafe.Pointer(c_name))
 	if runtimeConfig != "" {
-		c_runtimeConfig = C.CString(runtimeConfig)
+		c_runtime_config = C.CString(runtimeConfig)
+		defer C.free(unsafe.Pointer(c_runtime_config))
 	}
-
-	var c_credentials *C.char
 	if credentials != "" {
 		c_credentials = C.CString(credentials)
+		defer C.free(c_credentials)
 	}
 
 	pointer, handle, resCh, err := resolver.RegisterCall("indy_open_wallet")
@@ -76,12 +85,10 @@ func OpenWallet(name string, runtimeConfig string, credentials string) (int32, e
 		return -1, err
 	}
 
-	C.indy_open_wallet_proxy(pointer, C.int32_t(handle), C.CString(name), c_runtimeConfig, c_credentials)
+	C.indy_open_wallet_proxy(pointer, C.int32_t(handle), c_name, c_runtime_config, c_credentials)
 
-	log.Printf("Gonna wait\n")
 	_res := <-resCh
 	res := _res.(*openWalletResult)
-	log.Printf("Got result: %v\n", res)
 
 	if res.code != 0 {
 		return -1, fmt.Errorf("IndySDK error code: %d", res.code)
@@ -92,18 +99,16 @@ func OpenWallet(name string, runtimeConfig string, credentials string) (int32, e
 
 //export openWalletCallback
 func openWalletCallback(commandHandle, code, walletHandle int32) {
-	log.Printf("In open wallet callback\n")
-	ch, err := resolver.DeregisterCall(commandHandle)
+	resCh, err := resolver.DeregisterCall(commandHandle)
 	if err != nil {
 		log.Printf("ERROR: invalid handle in callback.\n")
 		return
 	}
 
-	res := &openWalletResult{
+	resCh <- &openWalletResult{
 		code:   code,
 		handle: walletHandle,
 	}
-	ch <- res
 }
 
 func CloseWallet(walletHandle int32) error {
@@ -125,20 +130,22 @@ func CloseWallet(walletHandle int32) error {
 
 //export closeWalletCallback
 func closeWalletCallback(commandHandle, code int32) {
-	log.Printf("In delete wallet callback\n")
-	ch, err := resolver.DeregisterCall(commandHandle)
+	resCh, err := resolver.DeregisterCall(commandHandle)
 	if err != nil {
 		log.Printf("ERROR: invalid handle in callback.\n")
 		return
 	}
 
-	ch <- code
+	resCh <- code
 }
 
 func DeleteWallet(name string, credentials string) error {
-	var c_credentials *C.char
+	var c_name, c_credentials *C.char
+	c_name = C.CString(name)
+	defer C.free(unsafe.Pointer(c_name))
 	if credentials != "" {
 		c_credentials = C.CString(credentials)
+		defer C.free(unsafe.Pointer(c_credentials))
 	}
 
 	pointer, handle, resCh, err := resolver.RegisterCall("indy_delete_wallet")
@@ -146,7 +153,7 @@ func DeleteWallet(name string, credentials string) error {
 		return err
 	}
 
-	C.indy_delete_wallet_proxy(pointer, C.int32_t(handle), C.CString(name), c_credentials)
+	C.indy_delete_wallet_proxy(pointer, C.int32_t(handle), c_name, c_credentials)
 
 	_res := <-resCh
 	res := _res.(int32)
@@ -159,12 +166,11 @@ func DeleteWallet(name string, credentials string) error {
 
 //export deleteWalletCallback
 func deleteWalletCallback(commandHandle, code int32) {
-	log.Printf("In delete wallet callback\n")
-	ch, err := resolver.DeregisterCall(commandHandle)
+	resCh, err := resolver.DeregisterCall(commandHandle)
 	if err != nil {
 		log.Printf("ERROR: invalid handle in callback.\n")
 		return
 	}
 
-	ch <- code
+	resCh <- code
 }
