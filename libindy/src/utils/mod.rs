@@ -13,7 +13,6 @@ pub mod crypto;
 #[macro_use]
 pub mod logger;
 
-pub mod inmem_wallet;
 
 #[allow(unused_macros)]
 #[macro_use]

@@ -1,11 +1,11 @@
-pub mod anoncreds;
+//pub mod anoncreds;
 pub mod common;
-pub mod ledger;
-pub mod pool;
-pub mod crypto;
-pub mod indy;
+//pub mod ledger;
+//pub mod pool;
+//pub mod crypto;
+//pub mod indy;
 pub mod wallet;
-pub mod did;
+//pub mod did;
 
 use api::ErrorCode;
 

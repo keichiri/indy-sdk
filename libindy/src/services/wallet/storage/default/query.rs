@@ -1,17 +1,17 @@
 use rusqlite;
 use rusqlite::types::ToSql;
 
-use language::{Operator,TagName,TargetValue};
-use storage::error::StorageError;
+use services::wallet::language::{Operator,TagName,TargetValue};
 
 
+// Translates Wallet Query Language to SQL
+// WQL input is provided as a reference to a top level Operator
+// Result is a tuple of query string and query arguments
 pub fn wql_to_sql<'a>(class: &'a Vec<u8>, op: &'a Operator, options: Option<&str>) -> (String, Vec<&'a ToSql>) {
     let mut arguments: Vec<&ToSql> = Vec::new();
     let clause_string = operator_to_sql(op, &mut arguments);
-    println!("Clause string: {}", &clause_string);
     let has_nonencrypted = clause_string.contains("plain_tag");
     let has_encrypted = clause_string.contains("enc_tag");
-    println!("Has nonenc: {}. Has enc: {}", has_nonencrypted, has_encrypted);
     let mut query_string = create_query_string(clause_string, has_nonencrypted, has_encrypted);
     query_string.push_str(" AND i.type = ?;");
     arguments.push(class);
@@ -20,7 +20,7 @@ pub fn wql_to_sql<'a>(class: &'a Vec<u8>, op: &'a Operator, options: Option<&str
 
 
 fn create_query_string(clause_string: String, has_nonenc: bool, has_enc: bool) -> String {
-    let mut query_string = "SELECT i.name, i.value, i.key FROM items as i".to_string();
+    let mut query_string = "SELECT i.id, i.name, i.value, i.key FROM items as i".to_string();
     if has_nonenc {
         query_string.push_str(" INNER JOIN tags_plaintext as plain_tag ON i.id == plain_tag.item_id");
     }
@@ -62,7 +62,7 @@ fn eq_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut Vec<
             arguments.push(queried_value);
             "(enc_tag.name = ? AND enc_tag.value = ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -79,7 +79,7 @@ fn neq_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut Vec
             arguments.push(queried_value);
             "(enc_tag.name = ? AND enc_tag.value != ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -91,7 +91,7 @@ fn gt_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut Vec<
             arguments.push(queried_value);
             "(plain_tag.name = ? AND plain_tag.value > ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -103,7 +103,7 @@ fn gte_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut Vec
             arguments.push(queried_value);
             "(plain_tag.name = ? AND plain_tag.value >= ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -115,7 +115,7 @@ fn lt_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut Vec<
             arguments.push(queried_value);
             "(plain_tag.name = ? AND plain_tag.value < ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -127,7 +127,7 @@ fn lte_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut Vec
             arguments.push(queried_value);
             "(plain_tag.name = ? AND plain_tag.value <= ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -139,7 +139,7 @@ fn like_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut Ve
             arguments.push(queried_value);
             "(plain_tag.name = ? AND plain_tag.value LIKE ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -151,7 +151,7 @@ fn regex_to_sql<'a>(name: &'a TagName, value: &'a TargetValue, arguments: &mut V
             arguments.push(queried_value);
             "(plain_tag.name = ? AND plain_tag.value REGEXP ?)".to_string()
         },
-        _ => panic!("lol")
+        _ => unreachable!()
     }
 }
 
@@ -162,7 +162,7 @@ fn in_to_sql<'a>(name: &'a TagName, values: &'a Vec<TargetValue>, arguments: &mu
         &TagName::PlainTagName(ref queried_name) => {
             in_string.push_str("(plain_tag.name = ? AND plain_tag.value IN (");
             arguments.push(queried_name);
-            
+
             for (index, value) in values.iter().enumerate() {
                 if let &TargetValue::Unencrypted(ref target) = value {
                     in_string.push_str("?");
@@ -170,16 +170,16 @@ fn in_to_sql<'a>(name: &'a TagName, values: &'a Vec<TargetValue>, arguments: &mu
                     if index < values.len() - 1 {
                         in_string.push(',');
                     }
-                } else {println!("Name: {:?}, Value: {:?}",name,value);unreachable!()}
+                } else { unreachable!() }
             }
-            
+
             in_string + "))"
         },
         &TagName::EncryptedTagName(ref queried_name) => {
             in_string.push_str("(enc_tag.name = ? AND enc_tag.value IN (");
             arguments.push(queried_name);
             let index_before_last = values.len() - 2;
-            
+
             for (index, value) in values.iter().enumerate() {
                 if let &TargetValue::Encrypted(ref target) = value {
                     in_string.push_str("?");
@@ -187,48 +187,22 @@ fn in_to_sql<'a>(name: &'a TagName, values: &'a Vec<TargetValue>, arguments: &mu
                     if index <= index_before_last {
                         in_string.push(',');
                     }
-                } else {println!("Name: {:?}, Value: {:?}",name,value);unreachable!()}
+                } else { unreachable!() }
             }
-            
+
             in_string + "))"
         },
-        _ => {println!("Name: {:?}",name);unreachable!()}
+        _ => unreachable!()
     }
 }
 
 
 fn and_to_sql<'a>(suboperators: &'a [Operator], arguments: &mut Vec<&'a ToSql>) -> String {
-//    suboperators.iter().map(|op: &Operator| -> String { operator_to_sql(op, arguments)} ).collect::<Vec<String>>().join(" AND ")
-//    let mut and_string = String::new();
-//    and_string.push('(');
-//    let index_before_last = suboperators.len() - 2;
-//    for (index, operator) in suboperators.iter().enumerate() {
-//        let operator_string = operator_to_sql(operator, arguments);
-//        and_string.push_str(&operator_string);
-//        if index <= index_before_last {
-//            and_string.push_str(" AND ");
-//        }
-//    }
-//    and_string.push(')');
-//    and_string
     join_operators(suboperators, " AND ", arguments)
 }
 
 
 fn or_to_sql<'a>(suboperators: &'a [Operator], arguments: &mut Vec<&'a ToSql>) -> String {
-//    suboperators.iter().map(|op: &Operator| -> String { operator_to_sql(op, arguments)} ).collect::<Vec<String>>().join(" OR ")
-//    let mut or_string = String::new();
-//    or_string.push('(');
-//    let index_before_last = suboperators.len() - 2;
-//    for (index, operator) in suboperators.iter().enumerate() {
-//        let operator_string = operator_to_sql(operator, arguments);
-//        or_string.push_str(&operator_string);
-//        if index <= index_before_last {
-//            or_string.push_str(" OR ");
-//        }
-//    }
-//    or_string.push(')');
-//    or_string
     join_operators(suboperators, " OR ", arguments)
 }
 
@@ -257,8 +231,8 @@ fn join_operators<'a>(operators: &'a [Operator], join_str: &str, arguments: &mut
 #[cfg(test)]
 mod tests {
     use super::*;
-    use language::*;
-    
+    use services::wallet::language;
+
     #[test]
     fn simple_and() {
         let condition_1 = Operator::And(vec![
@@ -272,7 +246,5 @@ mod tests {
         let query = Operator::Or(vec![condition_1, condition_2]);
         let class = vec![100,100,100];
         let (query, arguments) = wql_to_sql(&class, &query, None);
-        println!("Query: {:?}", query);
-        
     }
 }
