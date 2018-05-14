@@ -35,6 +35,7 @@ pub enum WalletError {
     ItemNotFound,
     ItemAlreadyExists,
     QueryError(String),
+    NotEmpty,
 }
 
 
@@ -57,7 +58,8 @@ impl fmt::Display for WalletError {
             WalletError::EncryptionError(ref description) => write!(f, "Wallet encryption error occurred. Description: {}", description),
             WalletError::ItemNotFound => write!(f, "Item not found"),
             WalletError::ItemAlreadyExists => write!(f, "Item already exists"),
-            WalletError::QueryError(ref description) => write!(f, "{}", description)
+            WalletError::QueryError(ref description) => write!(f, "{}", description),
+            WalletError::NotEmpty => write!(f, "Wallet not empty"),
         }
     }
 }
@@ -82,6 +84,7 @@ impl error::Error for WalletError {
             WalletError::ItemNotFound => "Item not found",
             WalletError::ItemAlreadyExists => "Item already exists",
             WalletError::QueryError(ref description) => description,
+            WalletError::NotEmpty => "Wallet not empty",
         }
     }
 
@@ -104,6 +107,7 @@ impl error::Error for WalletError {
             WalletError::ItemNotFound => None,
             WalletError::ItemAlreadyExists => None,
             WalletError::QueryError(_) => None,
+            WalletError::NotEmpty => None,
         }
     }
 }
@@ -128,6 +132,7 @@ impl ToErrorCode for WalletError {
             WalletError::ItemNotFound => ErrorCode::WalletItemNotFound,
             WalletError::ItemAlreadyExists => ErrorCode::WalletItemAlreadyExists,
             WalletError::QueryError(_) => ErrorCode::WalletQueryError,
+            WalletError::NotEmpty => ErrorCode::WalletNotEmpty,
         }
     }
 }

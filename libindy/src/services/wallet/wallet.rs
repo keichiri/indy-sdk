@@ -7,6 +7,7 @@ use utils::crypto::chacha20poly1305_ietf::ChaCha20Poly1305IETF;
 use errors::wallet::WalletError;
 
 use super::storage;
+use super::storage::StorageEntity;
 use super::iterator::WalletIterator;
 use super::encryption::*;
 use super::query_encryption::encrypt_query;
@@ -173,10 +174,7 @@ impl Wallet {
             }
         };
 
-        let tags = match decrypt_tags(&result.tags, &self.keys.tag_name_key, &self.keys.tag_value_key)? {
-            None => None,
-            Some(tags) => Some(serde_json::to_string(&tags)?)
-        };
+        let tags = decrypt_tags(&result.tags, &self.keys.tag_name_key, &self.keys.tag_value_key)?;
 
         Ok(WalletRecord::new(String::from(name), Some(type_.to_string()), value, tags))
     }
@@ -211,12 +209,55 @@ impl Wallet {
         self.name.clone()
     }
 
-    fn export(&self, writer: Box<Write>, key: [u8; 32]) -> Result<(), WalletError> {
-        unimplemented!()
+    fn export(&self, mut writer: Box<Write>, key: [u8; 32]) -> Result<(), WalletError> {
+        let all_storage_records = self.storage.get_all()?;
+        let mut buffer = Vec::new();
+//        let mut nonce = ChaCha20Poly1305IETF::gen_nonce();
+        let mut nonce = vec![1,2,3,4,5,6,7,8,9,10,11,12];
+        for storage_record in all_storage_records {
+            let record = decrypt_storage_record(&storage_record, &self.keys)?;
+            let WalletRecord{name: name, type_: Some(record_type), value: Some(record_value), tags: Some(record_tags)} = record;
+            let tags_json = serde_json::to_string(&tags)?;
+            let record_length = name.len() + type_.len() + value.len() + tags_json.len();
+            buffer.write(decrypted_record.name.as_bytes());
+            buffer.write(decrypted_record.type_.unwrap().as_bytes());
+            buffer.write(decrypted_record.value.unwrap().as_bytes());
+            buffer.write(tags_json.as_bytes());
+
+            let mut write_count = 0;
+            while write_count < buffer.len() {
+                let chunk = &buffer[i..i+1024];
+                let encrypted_chunk = ChaCha20Poly1305IETF::encrypt(chunk, &key, &mut nonce);
+                ChaCha20Poly1305IETF::increment_nonce(&mut nonce);
+                writer.write_all(&encrypted_chunk)?;
+                write_count += 1024;
+            }
+
+            let remaining_count = buffer.len() % 1024;
+            for i in 0 .. remaining_count {
+                buffer[i] = buffer[write_count + i];
+            }
+            buffer.resize(remaining_count, 0);
+        }
+
+        let last_encrypted_chunk = ChaCha20Poly1305IETF::encrypt(&buffer, &key, &mut nonce);
+        writer.write_all(&last_encrypted_chunk)?;
+
+        Ok(())
     }
 
-    fn import(&self, reader: Box<Read>, key: [u8; 32], clear_before: bool) -> Result<(), WalletError> {
-        unimplemented!()
+    fn import(&self, reader: Box<Read>, key: &[u8]) -> Result<(), WalletError> {
+        let first_record = self.storage.get_all()?.next()?;
+        if first_record.is_some() {
+            return Err(WalletError::NotEmpty);
+        }
+
+        let mut buffer = Vec::new();
+        let mut nonce = vec![1,2,3,4,5,6,7,8,9,10,11,12];
+
+
+
+        Ok(())
     }
 }
 
@@ -365,8 +406,7 @@ mod tests {
 
         assert_eq!(entity.name, name);
         assert_eq!(entity.value.unwrap(), value);
-        let retrieved_tags: Tags = serde_json::from_str(&entity.tags.unwrap()).unwrap();
-        assert_eq!(retrieved_tags, tags);
+        assert_eq!(entity.tags.unwrap(), tags);
     }
     #[test]
     fn wallet_set_get_works_for_reopen() {
@@ -383,8 +423,7 @@ mod tests {
 
         assert_eq!(entity.name, name);
         assert_eq!(entity.value.unwrap(), value);
-        let retrieved_tags: Tags = serde_json::from_str(&entity.tags.unwrap()).unwrap();
-        assert_eq!(retrieved_tags, tags);
+        assert_eq!(entity.tags.unwrap(), tags);
 
         wallet.close().unwrap();
 
@@ -397,8 +436,7 @@ mod tests {
 
         assert_eq!(entity.name, name);
         assert_eq!(entity.value.unwrap(), value);
-        let retrieved_tags: Tags = serde_json::from_str(&entity.tags.unwrap()).unwrap();
-        assert_eq!(retrieved_tags, tags);
+        assert_eq!(entity.tags.unwrap(), tags);
     }
 
     #[test]
@@ -512,7 +550,6 @@ mod tests {
 
         let item = wallet.get(type_, name, r##"{"fetch_type": false, "fetch_value": true, "fetch_tags": true}"##).unwrap();
         let tags = item.tags.unwrap();
-        let tags: Tags = serde_json::from_str(&tags).unwrap();
         let mut expected_tags = new_tags.clone();
         expected_tags.insert(tag_name_1.to_string(), tag_value_1.to_string());
 
@@ -552,7 +589,6 @@ mod tests {
 
         let item = wallet.get(type_, name, r##"{"fetch_type": false, "fetch_value": true, "fetch_tags": true}"##).unwrap();
         let retrieved_tags = item.tags.unwrap();
-        let retrieved_tags: Tags = serde_json::from_str(&retrieved_tags).unwrap();
         let mut expected_tags = updated_tags.clone();
         expected_tags.insert(tag_name_3.to_string(), tag_value_3.to_string());
 
@@ -588,7 +624,6 @@ mod tests {
 
         let item = wallet.get(type_, name, r##"{"fetch_type": false, "fetch_value": true, "fetch_tags": true}"##).unwrap();
         let retrieved_tags = item.tags.unwrap();
-        let retrieved_tags: Tags = serde_json::from_str(&retrieved_tags).unwrap();
         let mut expected_tags = HashMap::new();
         expected_tags.insert(tag_name_2.to_string(), tag_value_2.to_string());
 
@@ -610,8 +645,7 @@ mod tests {
 
         assert_eq!(entity.name, name);
         assert_eq!(entity.value.unwrap(), value);
-        let retrieved_tags: Tags = serde_json::from_str(&entity.tags.unwrap()).unwrap();
-        assert_eq!(retrieved_tags, tags);
+        assert_eq!(entity.tags.unwrap(), tags);
 
         wallet.delete(type_, name).unwrap();
         let res = wallet.get(type_, name, r##"{"fetch_type": false, "fetch_value": true, "fetch_tags": true}"##);
@@ -1513,8 +1547,7 @@ mod tests {
         expected_tags.insert(String::from("tag_name_2"), String::from("tag_value_2"));
         expected_tags.insert(String::from("~tag_name_1"), String::from("tag_value_1"));
         expected_tags.insert(String::from("*tag_name_2"), String::from("tag_value_2"));
-        let retrieved_tags: Tags = serde_json::from_str(&res.tags.unwrap()).unwrap();
-        assert_eq!(retrieved_tags, expected_tags);
+        assert_eq!(res.tags.unwrap(), expected_tags);
         let res = iterator.next().unwrap();
         assert!(res.is_none());
 

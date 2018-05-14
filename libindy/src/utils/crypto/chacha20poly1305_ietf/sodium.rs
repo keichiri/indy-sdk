@@ -4,6 +4,7 @@ use errors::common::CommonError;
 
 use self::sodiumoxide::crypto::aead::chacha20poly1305_ietf;
 use sodiumoxide::crypto::auth::hmacsha256;
+use sodiumoxide::utils::increment_le;
 use utils::byte_array::_clone_into_array;
 
 pub struct ChaCha20Poly1305IETF {
@@ -22,9 +23,22 @@ impl ChaCha20Poly1305IETF {
         chacha20poly1305_ietf::gen_nonce()[..].to_vec()
     }
 
+    pub fn increment_nonce(&mut nonce: &mut [u8]) {
+        increment_le(nonce);
+    }
+
     pub fn nonce_len() -> usize { chacha20poly1305_ietf::NONCEBYTES }
 
     pub fn key_len() -> usize { chacha20poly1305_ietf::KEYBYTES }
+
+    pub fn encrypt(input: &[u8], key: &[u8], mut nonce: &[u8]) -> Vec<u8> {
+        chacha20poly1305_ietf::seal(
+            input,
+            None,
+            &chacha20poly1305_ietf::Nonce(_clone_into_array(nonce)),
+            &chacha20poly1305_ietf::Key(_clone_into_array(key))
+        )
+    }
 
     pub fn encrypt_as_searchable(data: &[u8], key: &[u8], hmac_key: &[u8]) -> Vec<u8> {
         let hmacsha256::Tag(hash) = hmacsha256::authenticate(

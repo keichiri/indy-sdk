@@ -40,10 +40,7 @@ impl<'a> WalletIterator<'a> {
                 }
             };
 
-            let tags = match decrypt_tags(&next_storage_entity.tags, &self.keys.tag_name_key, &self.keys.tag_value_key)? {
-                None => None,
-                Some(tags) => Some(serde_json::to_string(&tags)?)
-            };
+            let tags = match decrypt_tags(&next_storage_entity.tags, &self.keys.tag_name_key, &self.keys.tag_value_key)?;
 
             Ok(Some(WalletRecord::new(name, None, value, tags)))
         } else { Ok(None) }

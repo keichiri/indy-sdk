@@ -301,24 +301,24 @@ impl WalletService {
         }
     }
 
-    pub fn add_record(&self, wallet_handle: i32, type_: &str, name: &str, value: &str, tags_json: &str) -> Result<(), WalletError> {
+    pub fn add_record(&self, wallet_handle: i32, type_: &str, name: &str, value: &str, tags: &HashMap<String, String>) -> Result<(), WalletError> {
         match self.wallets.borrow().get(&wallet_handle) {
             Some(wallet) => {
-                let tags: Tags = serde_json::from_str(tags_json)?;
                 wallet.add(type_, name, value, &tags)
             }
             None => Err(WalletError::InvalidHandle(wallet_handle.to_string()))
         }
     }
 
-    pub fn add_indy_object<T>(&self, wallet_handle: i32, name: &str, object: &T, tags_json: &str) -> Result<String, WalletError> where T: JsonEncodable, T: NamedType {
+    pub fn add_indy_object<T>(&self, wallet_handle: i32, name: &str, object: &T, tags: &HashMap<String, String>)
+        -> Result<String, WalletError> where T: JsonEncodable, T: NamedType {
         let type_ = T::short_type_name();
         match self.wallets.borrow().get(&wallet_handle) {
             Some(wallet) => {
                 let object_json = object.to_json()
                     .map_err(map_err_trace!())
                     .map_err(|err| CommonError::InvalidState(format!("Cannot serialize {:?}: {:?}", type_, err)))?;
-                self.add_record(wallet_handle, &self.add_prefix(type_), name, &object_json, tags_json)?;
+                self.add_record(wallet_handle, &self.add_prefix(type_), name, &object_json, tags)?;
                 Ok(object_json)
             }
             None => Err(WalletError::InvalidHandle(wallet_handle.to_string()))
@@ -346,39 +346,39 @@ impl WalletService {
         }
     }
 
-    pub fn add_record_tags(&self, wallet_handle: i32, type_: &str, name: &str, tags_json: &str) -> Result<(), WalletError> {
+    pub fn add_record_tags(&self, wallet_handle: i32, type_: &str, name: &str, tags: &HashMap<String, String>) -> Result<(), WalletError> {
         match self.wallets.borrow_mut().get_mut(&wallet_handle) {
             Some(wallet) => {
-                let tags: Tags = serde_json::from_str(tags_json)?;
                 wallet.add_tags(type_, name, &tags)
             },
             None => Err(WalletError::InvalidHandle(wallet_handle.to_string()))
         }
     }
 
-    pub fn add_indy_record_tags<T>(&self, wallet_handle: i32, name: &str, tags_json: &str) -> Result<(), WalletError> where T: NamedType {
-        self.add_record_tags(wallet_handle, &self.add_prefix(T::short_type_name()), name, tags_json)
+    pub fn add_indy_record_tags<T>(&self, wallet_handle: i32, name: &str, tags: &HashMap<String, String>)
+        -> Result<(), WalletError> where T: NamedType {
+        self.add_record_tags(wallet_handle, &self.add_prefix(T::short_type_name()), name, tags)
     }
 
-    pub fn update_record_tags(&self, wallet_handle: i32, type_: &str, name: &str, tags_json: &str) -> Result<(), WalletError> {
+    pub fn update_record_tags(&self, wallet_handle: i32, type_: &str, name: &str, tags: &HashMap<String, String>)
+        -> Result<(), WalletError> {
         match self.wallets.borrow_mut().get_mut(&wallet_handle) {
             Some(wallet) => {
-                let tags: Tags = serde_json::from_str(tags_json)?;
                 wallet.update_tags(type_, name, &tags)
             },
             None => Err(WalletError::InvalidHandle(wallet_handle.to_string()))
         }
     }
 
-    pub fn update_indy_record_tags<T>(&self, wallet_handle: i32, name: &str, tags_json: &str) -> Result<(), WalletError> where T: NamedType {
-        self.update_record_tags(wallet_handle, &self.add_prefix(T::short_type_name()), name, tags_json)
+    pub fn update_indy_record_tags<T>(&self, wallet_handle: i32, name: &str, tags: &HashMap<String, String>)
+        -> Result<(), WalletError> where T: NamedType {
+        self.update_record_tags(wallet_handle, &self.add_prefix(T::short_type_name()), name, tags)
     }
 
-    pub fn delete_record_tags(&self, wallet_handle: i32, type_: &str, name: &str, tag_names_json: &str) -> Result<(), WalletError> {
+    pub fn delete_record_tags(&self, wallet_handle: i32, type_: &str, name: &str, tag_names: &[String]) -> Result<(), WalletError> {
         match self.wallets.borrow_mut().get_mut(&wallet_handle) {
             Some(wallet) => {
-                let tag_names: Vec<String> = serde_json::from_str(tag_names_json)?;
-                wallet.delete_tags(type_, name, &tag_names[..])
+                wallet.delete_tags(type_, name, tag_names)
             },
             None => Err(WalletError::InvalidHandle(wallet_handle.to_string()))
         }
@@ -464,7 +464,7 @@ impl WalletService {
         if self.record_exists::<T>(wallet_handle, name)? {
             self.update_indy_object::<T>(wallet_handle, name, object)?
         } else {
-            self.add_indy_object::<T>(wallet_handle, name, object, "{}")?
+            self.add_indy_object::<T>(wallet_handle, name, object, &HashMap::new())?
         };
         Ok(())
     }
@@ -493,7 +493,7 @@ pub struct WalletRecord {
     name: String,
     type_: Option<String>,
     value: Option<String>,
-    tags: Option<String>
+    tags: Option<HashMap<String, String>>
 }
 
 impl JsonEncodable for WalletRecord {}
@@ -501,7 +501,7 @@ impl JsonEncodable for WalletRecord {}
 impl<'a> JsonDecodable<'a> for WalletRecord {}
 
 impl WalletRecord {
-    pub fn new(name: String, type_: Option<String>, value: Option<String>, tags: Option<String>) -> WalletRecord {
+    pub fn new(name: String, type_: Option<String>, value: Option<String>, tags: Option<HashMap<String, String>>) -> WalletRecord {
         WalletRecord {
             name: name,
             type_: type_,
@@ -527,8 +527,8 @@ impl WalletRecord {
         self.value.as_ref().map(String::as_str)
     }
 
-    pub fn get_tags(&self) -> Option<&str> {
-        self.tags.as_ref().map(String::as_str)
+    pub fn get_tags(&self) -> Option<&HashMap<String, String>> {
+        self.tags.as_ref()
     }
 }
 
