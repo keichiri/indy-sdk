@@ -7,7 +7,7 @@ use services::wallet::language::{Operator,TagName,TargetValue};
 // Translates Wallet Query Language to SQL
 // WQL input is provided as a reference to a top level Operator
 // Result is a tuple of query string and query arguments
-pub fn wql_to_sql<'a>(class: &'a Vec<u8>, op: &'a Operator, options: Option<&str>) -> (String, Vec<&'a ToSql>) {
+pub fn wql_to_sql<'a>(class: &'a Vec<u8>, op: &'a Operator) -> (String, Vec<&'a ToSql>) {
     let mut arguments: Vec<&ToSql> = Vec::new();
     let clause_string = operator_to_sql(op, &mut arguments);
     let has_nonencrypted = clause_string.contains("plain_tag");
@@ -245,6 +245,6 @@ mod tests {
         ]);
         let query = Operator::Or(vec![condition_1, condition_2]);
         let class = vec![100,100,100];
-        let (query, arguments) = wql_to_sql(&class, &query, None);
+        let (query, arguments) = wql_to_sql(&class, &query);
     }
 }

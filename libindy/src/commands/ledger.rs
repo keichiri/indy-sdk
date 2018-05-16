@@ -165,20 +165,20 @@ pub enum LedgerCommand {
         Box<Fn(Result<(String, String, u64), IndyError>) + Send>)
 }
 
-pub struct LedgerCommandExecutor {
+pub struct LedgerCommandExecutor<'a> {
     pool_service: Rc<PoolService>,
     crypto_service: Rc<CryptoService>,
-    wallet_service: Rc<WalletService>,
+    wallet_service: Rc<WalletService<'a>>,
     ledger_service: Rc<LedgerService>,
 
     send_callbacks: RefCell<HashMap<i32, Box<Fn(Result<String, IndyError>)>>>,
 }
 
-impl LedgerCommandExecutor {
+impl<'a> LedgerCommandExecutor<'a> {
     pub fn new(pool_service: Rc<PoolService>,
                crypto_service: Rc<CryptoService>,
-               wallet_service: Rc<WalletService>,
-               ledger_service: Rc<LedgerService>) -> LedgerCommandExecutor {
+               wallet_service: Rc<WalletService<'a>>,
+               ledger_service: Rc<LedgerService>) -> LedgerCommandExecutor<'a> {
         LedgerCommandExecutor {
             pool_service,
             crypto_service,

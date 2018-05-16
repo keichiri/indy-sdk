@@ -310,7 +310,7 @@ impl WalletStorage for PluggedStorage {
         unimplemented!();
     }
 
-    fn search<'a>(&'a self, type_: &Vec<u8>, query: &language::Operator, options: Option<&str>)
+    fn search<'a>(&'a self, type_: &Vec<u8>, query: &language::Operator, options: &str)
         -> Result<Box<StorageIterator + 'a>, WalletStorageError> {
 //        let type_ = CString::new(type_)?;
 //        let query_json = CString::new(query_json)?;

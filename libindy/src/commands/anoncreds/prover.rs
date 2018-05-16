@@ -85,18 +85,18 @@ pub enum ProverCommand {
         Box<Fn(Result<String, IndyError>) + Send>)
 }
 
-pub struct ProverCommandExecutor {
+pub struct ProverCommandExecutor<'a> {
     anoncreds_service: Rc<AnoncredsService>,
-    wallet_service: Rc<WalletService>,
+    wallet_service: Rc<WalletService<'a>>,
     crypto_service: Rc<CryptoService>,
     blob_storage_service: Rc<BlobStorageService>,
 }
 
-impl ProverCommandExecutor {
+impl<'a> ProverCommandExecutor<'a> {
     pub fn new(anoncreds_service: Rc<AnoncredsService>,
-               wallet_service: Rc<WalletService>,
+               wallet_service: Rc<WalletService<'a>>,
                crypto_service: Rc<CryptoService>,
-               blob_storage_service: Rc<BlobStorageService>) -> ProverCommandExecutor {
+               blob_storage_service: Rc<BlobStorageService>) -> ProverCommandExecutor<'a> {
         ProverCommandExecutor {
             anoncreds_service,
             wallet_service,
@@ -300,12 +300,12 @@ impl ProverCommandExecutor {
                             wallet_handle: i32) -> Result<Vec<CredentialInfo>, IndyError> {
         info!("get_credentials_info >>> wallet_handle: {:?}", wallet_handle);
 
-        let mut credentials_search =
+        let mut credentials_search_handle =
             self.wallet_service.search_indy_records::<Credential>(wallet_handle, "{}", &RecordOptions::id_value())?;
 
         let mut credentials_info: Vec<CredentialInfo> = Vec::new();
 
-        while let Some(credential_record) = credentials_search.fetch_next_record()? {
+        while let Some(credential_record) = self.wallet_service.fetch_next_search_record(wallet_handle, credentials_search_handle)? {
             let referent = credential_record.get_id();
             let value = credential_record.get_value()
                 .ok_or(CommonError::InvalidStructure(format!("Credential not found for id: {}", referent)))?;

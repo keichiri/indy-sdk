@@ -106,20 +106,20 @@ pub enum IssuerCommand {
         Box<Fn(Result<String, IndyError>) + Send>)
 }
 
-pub struct IssuerCommandExecutor {
+pub struct IssuerCommandExecutor<'a> {
     pub anoncreds_service: Rc<AnoncredsService>,
     pub blob_storage_service: Rc<BlobStorageService>,
     pub pool_service: Rc<PoolService>,
-    pub wallet_service: Rc<WalletService>,
+    pub wallet_service: Rc<WalletService<'a>>,
     pub crypto_service: Rc<CryptoService>
 }
 
-impl IssuerCommandExecutor {
+impl<'a> IssuerCommandExecutor<'a> {
     pub fn new(anoncreds_service: Rc<AnoncredsService>,
                pool_service: Rc<PoolService>,
                blob_storage_service: Rc<BlobStorageService>,
-               wallet_service: Rc<WalletService>,
-               crypto_service: Rc<CryptoService>) -> IssuerCommandExecutor {
+               wallet_service: Rc<WalletService<'a>>,
+               crypto_service: Rc<CryptoService>) -> IssuerCommandExecutor<'a> {
         IssuerCommandExecutor {
             anoncreds_service,
             pool_service,

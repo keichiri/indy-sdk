@@ -37,12 +37,12 @@ pub enum PairwiseCommand {
         Box<Fn(Result<(), IndyError>) + Send>)
 }
 
-pub struct PairwiseCommandExecutor {
-    wallet_service: Rc<WalletService>
+pub struct PairwiseCommandExecutor<'a> {
+    wallet_service: Rc<WalletService<'a>>
 }
 
-impl PairwiseCommandExecutor {
-    pub fn new(wallet_service: Rc<WalletService>) -> PairwiseCommandExecutor {
+impl<'a> PairwiseCommandExecutor<'a> {
+    pub fn new(wallet_service: Rc<WalletService<'a>>) -> PairwiseCommandExecutor {
         PairwiseCommandExecutor {
             wallet_service
         }
@@ -112,12 +112,12 @@ impl PairwiseCommandExecutor {
                      wallet_handle: i32) -> Result<String, IndyError> {
         info!("list_pairwise >>> wallet_handle: {:?}", wallet_handle);
 
-        let mut pairwise_search =
+        let mut pairwise_search_handle =
             self.wallet_service.search_indy_records::<Pairwise>(wallet_handle, "{}", &RecordOptions::id_value())?;
 
         let mut list_pairwise: Vec<String> = Vec::new();
 
-        while let Some(pairwise_record) = pairwise_search.fetch_next_record()? {
+        while let Some(pairwise_record) = self.wallet_service.fetch_next_search_record(wallet_handle, pairwise_search_handle)? {
             let pairwise_id = pairwise_record.get_id();
 
             let pairwise_value = pairwise_record.get_value()

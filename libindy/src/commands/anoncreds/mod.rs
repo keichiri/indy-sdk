@@ -21,18 +21,18 @@ pub enum AnoncredsCommand {
     Verifier(VerifierCommand),
 }
 
-pub struct AnoncredsCommandExecutor {
-    issuer_command_cxecutor: IssuerCommandExecutor,
-    prover_command_cxecutor: ProverCommandExecutor,
+pub struct AnoncredsCommandExecutor<'a> {
+    issuer_command_cxecutor: IssuerCommandExecutor<'a>,
+    prover_command_cxecutor: ProverCommandExecutor<'a>,
     verifier_command_cxecutor: VerifierCommandExecutor
 }
 
-impl AnoncredsCommandExecutor {
+impl<'a> AnoncredsCommandExecutor<'a> {
     pub fn new(anoncreds_service: Rc<AnoncredsService>,
                blob_storage_service: Rc<BlobStorageService>,
                pool_service: Rc<PoolService>,
-               wallet_service: Rc<WalletService>,
-               crypto_service: Rc<CryptoService>) -> AnoncredsCommandExecutor {
+               wallet_service: Rc<WalletService<'a>>,
+               crypto_service: Rc<CryptoService>) -> AnoncredsCommandExecutor<'a> {
         AnoncredsCommandExecutor {
             issuer_command_cxecutor: IssuerCommandExecutor::new(
                 anoncreds_service.clone(), pool_service.clone(),

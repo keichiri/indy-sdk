@@ -63,7 +63,7 @@ pub trait WalletStorage {
     fn update(&self, type_: &Vec<u8>, name: &Vec<u8>, value: &Vec<u8>, value_key: &Vec<u8>) -> Result<(), WalletStorageError>;
     fn delete(&self, type_: &Vec<u8>, name: &Vec<u8>) -> Result<(), WalletStorageError>;
     fn get_all<'a>(&'a self) -> Result<Box<StorageIterator + 'a>, WalletStorageError>;
-    fn search<'a>(&'a self, type_: &Vec<u8>, query: &language::Operator, options: Option<&str>) -> Result<Box<StorageIterator + 'a>, WalletStorageError>;
+    fn search<'a>(&'a self, type_: &Vec<u8>, query: &language::Operator, options: &str) -> Result<Box<StorageIterator + 'a>, WalletStorageError>;
     fn clear(&self) -> Result<(), WalletStorageError>;
     fn close(&mut self) -> Result<(), WalletStorageError>;
 }

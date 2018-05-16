@@ -51,12 +51,12 @@ pub enum WalletCommand {
            Box<Fn(Result<(), IndyError>) + Send>)
 }
 
-pub struct WalletCommandExecutor {
-    wallet_service: Rc<WalletService>
+pub struct WalletCommandExecutor<'a> {
+    wallet_service: Rc<WalletService<'a>>
 }
 
-impl WalletCommandExecutor {
-    pub fn new(wallet_service: Rc<WalletService>) -> WalletCommandExecutor {
+impl<'a> WalletCommandExecutor<'a> {
+    pub fn new(wallet_service: Rc<WalletService>) -> WalletCommandExecutor<'a> {
         WalletCommandExecutor {
             wallet_service
         }

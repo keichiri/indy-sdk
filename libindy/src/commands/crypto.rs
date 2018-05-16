@@ -62,15 +62,15 @@ pub enum CryptoCommand {
         Box<Fn(Result<Vec<u8>, IndyError>) + Send>)
 }
 
-pub struct CryptoCommandExecutor {
-    wallet_service: Rc<WalletService>,
+pub struct CryptoCommandExecutor<'a> {
+    wallet_service: Rc<WalletService<'a>>,
     crypto_service: Rc<CryptoService>,
 }
 
-impl CryptoCommandExecutor {
-    pub fn new(wallet_service: Rc<WalletService>,
+impl<'a> CryptoCommandExecutor<'a> {
+    pub fn new(wallet_service: Rc<WalletService<'a>>,
                crypto_service: Rc<CryptoService>,
-    ) -> CryptoCommandExecutor {
+    ) -> CryptoCommandExecutor<'a> {
         CryptoCommandExecutor {
             wallet_service,
             crypto_service,

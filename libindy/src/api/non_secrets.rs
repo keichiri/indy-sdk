@@ -412,9 +412,11 @@ pub  extern fn indy_fetch_wallet_search_next_records(command_handle: i32,
 /// Close wallet search (make search handle invalid)
 ///
 /// #Params
+/// wallet_handle: wallet handle (created by open_wallet)
 /// wallet_search_handle: wallet search handle
 #[no_mangle]
 pub  extern fn indy_close_wallet_search(command_handle: i32,
+                                        wallet_handle: i32,
                                         wallet_search_handle: i32,
                                         cb: Option<extern fn(command_handle_: i32, err: ErrorCode)>) -> ErrorCode {
     check_useful_c_callback!(cb, ErrorCode::CommonInvalidParam5);
@@ -422,6 +424,7 @@ pub  extern fn indy_close_wallet_search(command_handle: i32,
     let result = CommandExecutor::instance()
         .send(Command::NonSecrets(
             NonSecretsCommand::CloseSearch(
+                wallet_handle,
                 wallet_search_handle,
                 Box::new(move |result| {
                     let err = result_to_err_code!(result);

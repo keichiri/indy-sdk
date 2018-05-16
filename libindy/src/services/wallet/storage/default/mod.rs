@@ -528,12 +528,9 @@ impl WalletStorage for SQLiteStorage {
         Ok(Box::new(storage_iterator))
     }
 
-    fn search<'a>(&'a self, type_: &Vec<u8>, query: &language::Operator, options: Option<&str>) -> Result<Box<StorageIterator + 'a>, WalletStorageError> {
-        let fetch_options = match options {
-            None => FetchOptions::default(),
-            Some(option_str) => serde_json::from_str(option_str)?
-        };
-        let (query_string, query_arguments) = query::wql_to_sql(type_, query, options);
+    fn search<'a>(&'a self, type_: &Vec<u8>, query: &language::Operator, options: &str) -> Result<Box<StorageIterator + 'a>, WalletStorageError> {
+        let fetch_options: FetchOptions = serde_json::from_str(options)?;
+        let (query_string, query_arguments) = query::wql_to_sql(type_, query);
 
         let statement = self.conn.prepare(&query_string)?;
         let tag_retriever = if fetch_options.fetch_tags {

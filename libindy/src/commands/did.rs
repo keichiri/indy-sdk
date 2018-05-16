@@ -116,19 +116,19 @@ macro_rules! ensure_their_did {
         });
 }
 
-pub struct DidCommandExecutor {
+pub struct DidCommandExecutor<'a> {
     pool_service: Rc<PoolService>,
-    wallet_service: Rc<WalletService>,
+    wallet_service: Rc<WalletService<'a>>,
     crypto_service: Rc<CryptoService>,
     ledger_service: Rc<LedgerService>,
     deferred_commands: RefCell<HashMap<i32, DidCommand>>,
 }
 
-impl DidCommandExecutor {
+impl<'a> DidCommandExecutor<'a> {
     pub fn new(pool_service: Rc<PoolService>,
-               wallet_service: Rc<WalletService>,
+               wallet_service: Rc<WalletService<'a>>,
                crypto_service: Rc<CryptoService>,
-               ledger_service: Rc<LedgerService>) -> DidCommandExecutor {
+               ledger_service: Rc<LedgerService>) -> DidCommandExecutor<'a> {
         DidCommandExecutor {
             pool_service,
             wallet_service,
@@ -331,12 +331,12 @@ impl DidCommandExecutor {
     fn list_my_dids_with_meta(&self, wallet_handle: i32) -> Result<String, IndyError> {
         info!("list_my_dids_with_meta >>> wallet_handle: {:?}", wallet_handle);
 
-        let mut did_search =
+        let mut did_search_handle =
             self.wallet_service.search_indy_records::<Did>(wallet_handle, "{}", &SearchOptions::full())?;
 
         let mut dids: Vec<DidWithMeta> = Vec::new();
 
-        while let Some(did_record) = did_search.fetch_next_record()? {
+        while let Some(did_record) = self.wallet_service.fetch_next_search_record(wallet_handle, did_search_handle)? {
             let did_id = did_record.get_id();
 
             let did = did_record.get_value()
