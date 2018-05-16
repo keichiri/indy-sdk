@@ -9,10 +9,10 @@ use super::storage::{StorageEntity,TagValue};
 use super::wallet::{Keys,TagName};
 
 
-pub(super) fn encrypt_tag_names(tag_names: &[String], tag_name_key: &[u8], tags_hmac_key: &[u8]) -> Vec<TagName> {
+pub(super) fn encrypt_tag_names(tag_names: &[&str], tag_name_key: &[u8], tags_hmac_key: &[u8]) -> Vec<TagName> {
     let mut encrypted_tag_names = Vec::new();
 
-    for name in tag_names {
+    for &name in tag_names {
         let encrypted_name = ChaCha20Poly1305IETF::encrypt_as_searchable(name.as_bytes(), tag_name_key, tags_hmac_key);
         let tag_name = if name.chars().next() == Some('~') {
             TagName::OfPlain(encrypted_name)

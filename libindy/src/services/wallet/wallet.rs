@@ -139,7 +139,7 @@ impl Wallet {
         Ok(())
     }
 
-    pub fn delete_tags(&mut self, type_: &str, name: &str, tag_names: &[String]) -> Result<(), WalletError> {
+    pub fn delete_tags(&mut self, type_: &str, name: &str, tag_names: &[&str]) -> Result<(), WalletError> {
         let encrypted_type = ChaCha20Poly1305IETF::encrypt_as_searchable(type_.as_bytes(), &self.keys.type_key, &self.keys.item_hmac_key);
         let encrypted_name = ChaCha20Poly1305IETF::encrypt_as_searchable(name.as_bytes(), &self.keys.name_key, &self.keys.item_hmac_key);
         let encrypted_tag_names = encrypt_tag_names(tag_names, &self.keys.tag_name_key, &self.keys.tags_hmac_key);
@@ -619,7 +619,7 @@ mod tests {
 
         wallet.add(type_, name, value, &tags).unwrap();
 
-        let tag_names = vec![tag_name_1.to_string(), tag_name_3.to_string()];
+        let tag_names = vec![tag_name_1, tag_name_3];
         wallet.delete_tags(type_, name, &tag_names[..]).unwrap();
 
         let item = wallet.get(type_, name, r##"{"fetch_type": false, "fetch_value": true, "fetch_tags": true}"##).unwrap();
