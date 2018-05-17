@@ -132,9 +132,9 @@ impl NonSecretsCommandExecutor {
 
         let tags = match tags_json {
             None => HashMap::new(),
-            Some(tags_string) =>  match serde_json::from_str(tag_names_json) {
+            Some(tags_string) =>  match serde_json::from_str(tags_string) {
                 Ok(tag_names) => tag_names,
-                Err(serde_json_err) => return Err(IndyError::WalletError(WalletError::InputError(format!("Invalid tags input: {}", tag_names_json))))
+                Err(serde_json_err) => return Err(IndyError::WalletError(WalletError::InputError(format!("Invalid tags input: {}", tags_string))))
             }
         };
         let res = self.wallet_service.add_record(wallet_handle, type_, id, value, &tags)?; //TODO: question

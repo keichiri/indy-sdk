@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::{Write,Read};
+use std::mem;
 
 use serde_json;
 use utils::crypto::chacha20poly1305_ietf::ChaCha20Poly1305IETF;
@@ -166,11 +167,11 @@ impl Wallet {
         let value = match result.value {
             None => None,
             Some(storage_value) => {
-                let value_key = ChaCha20Poly1305IETF::decrypt(&storage_value.key, &self.keys.value_key)?;
+                let value_key = ChaCha20Poly1305IETF::decrypt_merged(&storage_value.key, &self.keys.value_key)?;
                 if value_key.len() != ChaCha20Poly1305IETF::key_len() {
                     return Err(WalletError::EncryptionError("Value key is not right size".to_string()));
                 }
-                Some(String::from_utf8(ChaCha20Poly1305IETF::decrypt(&storage_value.data, &value_key)?)?)
+                Some(String::from_utf8(ChaCha20Poly1305IETF::decrypt_merged(&storage_value.data, &value_key)?)?)
             }
         };
 
@@ -209,58 +210,75 @@ impl Wallet {
         self.name.clone()
     }
 
-    fn export(&self, mut writer: Box<Write>, key: [u8; 32]) -> Result<(), WalletError> {
-        let all_storage_records = self.storage.get_all()?;
-        let mut buffer = Vec::new();
+    pub fn export(&self, mut writer: Box<Write>, key: [u8; 32]) -> Result<(), WalletError> {
+//        let mut all_storage_records = self.storage.get_all()?;
 //        let mut nonce = ChaCha20Poly1305IETF::gen_nonce();
-        let mut nonce = vec![1,2,3,4,5,6,7,8,9,10,11,12];
-        for storage_record in all_storage_records {
-            let record = decrypt_storage_record(&storage_record, &self.keys)?;
-            let WalletRecord{name: name, type_: Some(record_type), value: Some(record_value), tags: Some(record_tags)} = record;
-            let tags_json = serde_json::to_string(&tags)?;
-            let record_length = name.len() + type_.len() + value.len() + tags_json.len();
-            buffer.write(decrypted_record.name.as_bytes());
-            buffer.write(decrypted_record.type_.unwrap().as_bytes());
-            buffer.write(decrypted_record.value.unwrap().as_bytes());
-            buffer.write(tags_json.as_bytes());
-
-            let mut write_count = 0;
-            while write_count < buffer.len() {
-                let chunk = &buffer[i..i+1024];
-                let encrypted_chunk = ChaCha20Poly1305IETF::encrypt(chunk, &key, &mut nonce);
-                ChaCha20Poly1305IETF::increment_nonce(&mut nonce);
-                writer.write_all(&encrypted_chunk)?;
-                write_count += 1024;
-            }
-
-            let remaining_count = buffer.len() % 1024;
-            for i in 0 .. remaining_count {
-                buffer[i] = buffer[write_count + i];
-            }
-            buffer.resize(remaining_count, 0);
-        }
-
-        let last_encrypted_chunk = ChaCha20Poly1305IETF::encrypt(&buffer, &key, &mut nonce);
-        writer.write_all(&last_encrypted_chunk)?;
+//        let mut buffer = Vec::new();
+//
+//        // TODO - remove
+//        let key: [u8; 32] = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32];
+//        let mut nonce = vec![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+//
+//        while let Some(storage_record) = all_storage_records.next()? {
+//            let decrypted_record = decrypt_storage_record(&storage_record, &self.keys)?;
+//            decrypted_record.serialise_into_buffer(&mut buffer)?;
+//
+//            let mut index = 0;
+//            while index < buffer.len() {
+//                let chunk = &buffer[index .. index+1024];
+//                let encrypted_chunk = ChaCha20Poly1305IETF::encrypt(chunk, &key, &mut nonce);
+//                writer.write_all(&encrypted_chunk)?;
+//                index += 1024;
+//                ChaCha20Poly1305IETF::increment_nonce(&mut nonce);
+//            }
+//
+//            let left_count = buffer.len() % 1024;
+//            for i in 0 .. left_count {
+//                buffer[i] = buffer[index + i];
+//            }
+//            buffer.resize(left_count, 0);
+//        }
+//
+//        let last_encrypted_chunk = ChaCha20Poly1305IETF::encrypt(&buffer, &key, &mut nonce);
+//        writer.write_all(&last_encrypted_chunk)?;
 
         Ok(())
     }
 
-    fn import(&self, reader: Box<Read>, key: &[u8]) -> Result<(), WalletError> {
-        let first_record = self.storage.get_all()?.next()?;
-        if first_record.is_some() {
-            return Err(WalletError::NotEmpty);
-        }
-
-        let mut buffer = Vec::new();
-        let mut nonce = vec![1,2,3,4,5,6,7,8,9,10,11,12];
-
-
+    pub fn import(&self, mut reader: Box<Read>, key: [u8; 32]) -> Result<(), WalletError> {
+        // TODO - remove
+//        let key: [u8; 32] = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32];
+//        let mut nonce = vec![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+//
+//        let mut item_buffer = Vec::new();
+//        let mut encrypted_chunk: [u8; 1040] = [0; 1040];
+//
+//        loop {
+//            let read_count = reader.read(&encrypted_chunk)?;
+//            if read_count < 1040 {
+//                break;
+//            }
+//
+//            let decrypted_chunk = ChaCha20Poly1305IETF::decrypt(&encrypted_chunk, &key, &nonce)?;
+//            ChaCha20Poly1305IETF::increment_nonce(&mut nonce);
+//
+//            let item_length: i32 = unsafe { mem::transmute(&decrypted_chunk[..4]) };
+//            let item_length = i32::from_be(item_length);
+//            item_buffer.extend(&decrypted_chunk[4..]);
+//
+//            let mut read_count = 1020;
+//            while read_count < item_length {
+//                let decrypted_chunk = ChaCha20Poly1305IETF::decrypt(&encrypted_chunk, &key, &nonce)?;
+//                ChaCha20Poly1305IETF::increment_nonce(&mut nonce);
+//                item_buffer.extend(&decrypted_chunk);
+//            }
+//
+//
+//        }
 
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {

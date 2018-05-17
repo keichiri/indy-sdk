@@ -14,6 +14,7 @@ use std::fs;
 use std::fs::{File, DirBuilder};
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::mem;
 use named_type::NamedType;
 
 use serde_json;
@@ -268,7 +269,7 @@ impl WalletService {
         let (storage, enc_keys) = storage_type.open_storage(name,
                                                             config.as_ref().map(String::as_str),
                                                             &credentials.storage_credentials)?;
-        let key_vector = ChaCha20Poly1305IETF::decrypt(&enc_keys, &credentials.master_key)?;
+        let key_vector = ChaCha20Poly1305IETF::decrypt_merged(&enc_keys, &credentials.master_key)?;
         let keys = Keys::new(key_vector);
         let wallet = Wallet::new(name, &descriptor.pool_name, storage, keys);
         let wallet_handle = SequenceUtils::get_next_id();
@@ -488,6 +489,21 @@ impl WalletService {
     }
 }
 
+fn length_to_bigend_bytes(length: usize) -> [u8; 4] {
+    let length = (length as i32).to_be();
+    let res: [u8; 4] = unsafe { mem::transmute(length) };
+    res
+}
+
+fn bigend_bytes_to_length(bytes: &[u8]) -> usize {
+    let mut byte_array: [u8; 4] = [0; 4];
+    byte_array.clone_from_slice(&bytes[0..4]);
+    let length: i32 = unsafe { mem::transmute(byte_array) };
+    let length = i32::from_be(length);
+    (length as usize)
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletRecord {
     name: String,
@@ -509,6 +525,38 @@ impl WalletRecord {
             tags: tags,
         }
     }
+
+    fn deserialise_from_buffer(mut buffer: &[u8]) -> Result<(usize, WalletRecord), WalletError> {
+        if buffer.len() < 4 {
+            return Err(WalletError::InputError("Serialised item length not valid".to_string()));
+        }
+
+        let item_length = bigend_bytes_to_length(&buffer[0..4]);
+        buffer = &buffer[4..];
+        if buffer.len() < item_length {
+            return Err(WalletError::InputError("Serialised wallet record does not match input length".to_string()));
+        }
+
+        let name_length = bigend_bytes_to_length(&buffer[..4]);
+        let name = String::from_utf8(buffer[4..4+name_length].to_owned())?;
+        buffer = &buffer[4+name_length..];
+
+        let type_length = bigend_bytes_to_length(&buffer[..4]);
+        let type_ = String::from_utf8(buffer[4..4+type_length].to_owned())?;
+        buffer = &buffer[4+type_length..];
+
+        let value_length = bigend_bytes_to_length(&buffer[..4]);
+        let value = String::from_utf8(buffer[4..4+value_length].to_owned())?;
+        buffer = &buffer[4+value_length..];
+
+        let tags_json_length = bigend_bytes_to_length(&buffer[..4]);
+        let tags_json = String::from_utf8(buffer[4..4+tags_json_length].to_owned())?;
+        let tags: HashMap<String, String> = serde_json::from_str(&tags_json)?;
+
+        let wallet_record = WalletRecord::new(name,Some(type_), Some(value),Some(tags));
+        Ok((item_length, wallet_record))
+    }
+
     pub fn get_id(&self) -> &str {
         self.name.as_str()
     }
@@ -530,6 +578,28 @@ impl WalletRecord {
     pub fn get_tags(&self) -> Option<&HashMap<String, String>> {
         self.tags.as_ref()
     }
+
+    fn serialise_into_buffer(self, buffer: &mut Vec<u8>) -> Result<(), WalletError> {
+        let name = self.name;
+        let type_ = self.type_.unwrap_or(String::new());
+        let value = self.value.unwrap_or(String::new());
+        let tags = self.tags.unwrap_or(HashMap::new());
+        let tags_json = serde_json::to_string(&tags)?;
+        let total_length = name.len() + type_.len() + value.len() + tags_json.len() + 16;
+
+        buffer.extend(&length_to_bigend_bytes(total_length));
+        buffer.extend(&length_to_bigend_bytes(name.len()));
+        buffer.extend(name.as_bytes());
+        buffer.extend(&length_to_bigend_bytes(type_.len()));
+        buffer.extend(type_.as_bytes());
+        buffer.extend(&length_to_bigend_bytes(value.len()));
+        buffer.extend(value.as_bytes());
+        buffer.extend(&length_to_bigend_bytes(tags_json.len()));
+        buffer.extend(tags_json.as_bytes());
+
+        Ok(())
+    }
+
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -635,6 +705,7 @@ fn _wallet_config_path(name: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use std;
+    use std::collections::HashMap;
     use super::*;
     //    use api::ErrorCode;
     //    use errors::wallet::WalletError;
@@ -658,6 +729,31 @@ mod tests {
 //    const QUERY_EMPTY: &'static str = "{}";
 //    const OPTIONS_EMPTY: &'static str = "{}";
 
+
+    /**
+        Wallet Record tests
+    */
+    #[test]
+    fn test_wallet_record_serialization_and_deserialization() {
+        let name = String::from("name");
+        let type_ = String::from("type");
+        let value = String::from("value");
+        let mut tags = HashMap::new();
+        tags.insert(String::from("~tag_name_1"), String::from("tag_value_1"));
+        tags.insert(String::from("~tag_name_2"), String::from("tag_value_2"));
+        tags.insert(String::from("tag_name_3"), String::from("tag_value_3"));
+
+        let record = WalletRecord::new(name.clone(), Some(type_.clone()), Some(value.clone()), Some(tags.clone()));
+        let mut buff = Vec::new();
+        record.serialise_into_buffer(&mut buff);
+
+        let (size, new_record) = WalletRecord::deserialise_from_buffer(&buff).unwrap();
+        assert_eq!(size, buff.len());
+        assert_eq!(&new_record.name, &name);
+        assert_eq!(&new_record.type_.unwrap(), &type_);
+        assert_eq!(&new_record.value.unwrap(), &value);
+        assert_eq!(&new_record.tags.unwrap(), &tags);
+    }
     
     fn _fetch_options(type_: bool, value: bool, tags: bool) -> String {
         let mut map = HashMap::new();
