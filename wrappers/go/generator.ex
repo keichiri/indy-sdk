@@ -1,3 +1,18 @@
+defmodule Utils do
+  def snake_to_camel({name1, name2}) do
+    {snake_to_camel(name1), snake_to_camel(name2)}
+  end
+  def snake_to_camel(name) do
+    name
+    |> String.split("_")
+    |> Enum.split(1)
+    |> (fn {[first], others} ->
+      first <> Enum.join(Enum.map(others, &String.capitalize/1))
+    end).()
+  end
+end
+
+
 defmodule Generator do
   @function_declaration_regex ~r/extern\s(indy.*?\));/s
   @typedef_regex ~r/typedef\s+?(?<original_type>.+?)\s+?(?<alias_type>[A-Za-z0-9_-]+?);/
@@ -117,7 +132,7 @@ defmodule IndyFunction do
 end
 
 
-defmodule Translator do
+defmodule GoTranslator do
   @c_to_go_types %{
     "enum" => "int32",
     "int32_t" => "int32",
@@ -131,8 +146,16 @@ defmodule Translator do
      {"const char*", "name"}, {"const char*", "xtype"},
      {"const char*", "config"}, {"const char*", "credentials"}],
     return_type: "indy_error_t"}
+
+
   def translate_function(indy_function) do
 
+  end
+
+  def function_c_to_go(indy_function) do
+    %{indy_function | name: Utils.snake_to_camel(String.trim_leading(indy_function.name, "indy_")),
+                      parameters: params_c_to_go(indy_function.parameters),
+                      callback_parameters: params_c_to_go(indy_function.callback_parameters)}
   end
 
   def generate_c_proxy(indy_function) do
@@ -155,12 +178,19 @@ defmodule Translator do
   end
 
   def generate_go_callback(indy_function) do
-    go_params = to_go_types(indy_function.callback_params)
-    go_params_string =
-      go_params
-      |> Enum.map(fn {type, name} -> {name, type} end)
-      |> Enum.join(", ")
+    go_callback_signature = generate_go_callback_signature(indy_function)
+    result_send = if length(indy_function.callback_parameters) > 2 do
+      "resCh <- #{Enum.at(indy_function.callback_parameters, 1)}"
+    else
+      "resCh <- #{generate_result(indy_function)}"
+    end
+  end
 
+
+  defp params_c_to_go(params) do
+    params
+    |> to_go_types
+    |> Enum.map(&Utils.snake_to_camel/1)
   end
 
 
@@ -174,11 +204,7 @@ defmodule Translator do
     callback_name =
       indy_function.name
       |> String.trim_leading("indy_")
-      |> String.split("_")
-      |> Enum.split(1)
-      |> (fn {[first], rest} ->
-        Enum.join([first | Enum.map(rest, &String.capitalize/1)], "")
-      end).()
+      |> Utils.snake_to_camel
     IO.puts("Callback name: #{inspect callback_name}")
     go_params = to_go_types(indy_function.callback_parameters)
     go_params_string =
@@ -189,4 +215,64 @@ defmodule Translator do
     "func #{callback_name}(#{go_params_string})"
   end
 
+  # TODO - private
+  def generate_result(indy_function) do
+    params = Enum.drop(indy_function.callback_parameters, 1)
+
+  end
+end
+
+
+defmodule Result do
+  def generate_strings(function_name, [_handle_param | params]) do
+    if length(params) > 1 do
+      {
+        result_definition(function_name, params),
+        result_initialisation_and_sending(function_name, params),
+        result_retrieval_from_channel_struct(function_name, params)
+      }
+    else
+      [{param_type, param_name} = first | _] = params
+      {nil, "resCh <- #{param_name}", result_retrieval_from_channel_single(param_type, param_name)}
+    end
+  end
+  def is_multiple(callback_data_params) do
+    length(callback_data_params) > 1
+  end
+
+  def result_definition(function_name, callback_data_params) do
+    field_definitions =
+      callback_data_params
+      |> Enum.map(fn {type, field} ->
+        field <> " " <> type
+      end)
+    "type #{result_struct_name(function_name)} struct {\n\t#{Enum.join(field_definitions, "\n\t")}\n}"
+  end
+
+  def result_initialisation_and_sending(function_name, callback_data_params) do
+    attr_init_strings = Enum.map(callback_data_params, fn {_, field} ->
+      field <> ": " <> field
+    end)
+    "resCh <- &#{result_struct_name(function_name)} {\n\t#{Enum.join(attr_init_strings, ",\n\t")},\n}"
+  end
+
+  def result_retrieval_from_channel_struct(function_name, [{_, first_param_name} | _] = callback_data_params) do
+    receival = "_res := <-resCh"
+    assert_type = "res := _res.(*#{result_struct_name(function_name)})"
+    err_msg_fmt = "fmt.Errorf(\"Indy SDK error code: %d\", res.#{first_param_name})"
+    error_check = "if res.#{first_param_name} != 0 {\n\treturn nil, #{err_msg_fmt}}\n}\n"
+    "#{receival}\n\t#{assert_type}\n\t#{error_check}"
+  end
+
+  def result_retrieval_from_channel_single(param_type, param_name) do
+    receival = "_res := <-resCh"
+    assert_type = "res := _res.(#{param_type})"
+    err_msg_fmt = "fmt.Errorf(\"Indy SDK error code: %d\", res)"
+    error_check = "if res != 0 {\n\t\treturn nil, #{err_msg_fmt}}\n\t}\n"
+    "#{receival}\n\t#{assert_type}\n\t#{error_check}"
+  end
+
+  def result_struct_name(function_name) do
+    "#{function_name}Result"
+  end
 end
