@@ -83,11 +83,8 @@ defmodule Generator do
 
   def demo do
     original_declarations = declarations_from_path("../../libindy/include")
-    IO.inspect original_declarations
     types = types_from_path("../../libindy/include")
-    IO.inspect types
     replaced_types_declarations = replace_types(original_declarations, types)
-    IO.inspect replaced_types_declarations
   end
 end
 
@@ -110,7 +107,6 @@ defmodule IndyFunction do
   end
 
   def replace_types(function, types) do
-    IO.puts "Types: #{inspect types}"
     %{function | parameters: replace_parameter_types(function.parameters, types),
                  callback_parameters: replace_parameter_types(function.callback_parameters, types)}
   end
@@ -149,10 +145,14 @@ defmodule GoTranslator do
 
 
   def translate_function(indy_function) do
+    {c_proxy_declaration, c_proxy_definition} = generate_c_proxy(indy_function)
+    {result_declaration, result_sending, result_retrieving} = Result.generate_strings(indy_function)
+    {go_callback_c_declaration, go_callback} = generate_go_callback(indy_function, result_sending)
+    indy_go_function = to_go_types_and_conventions(indy_function)
 
   end
 
-  def function_c_to_go(indy_function) do
+  def to_go_types_and_conventions(indy_function) do
     %{indy_function | name: Utils.snake_to_camel(String.trim_leading(indy_function.name, "indy_")),
                       parameters: params_c_to_go(indy_function.parameters),
                       callback_parameters: params_c_to_go(indy_function.callback_parameters)}
@@ -174,18 +174,33 @@ defmodule GoTranslator do
       |> Enum.join(", ")
     function_pointer_cast_string = "int32 (*func)(#{params_type_string}) = fp;"
     function_call_string = "return func(#{params_name_string});"
-    "#{signature_string} {\n\t#{function_pointer_cast_string}\n\t#{function_call_string}\n}"
+    declaration = "#{signature_string};"
+    definition = "#{signature_string} {\n\t#{function_pointer_cast_string}\n\t#{function_call_string}\n}"
+    {declaration, definition}
   end
 
-  def generate_go_callback(indy_function) do
-    go_callback_signature = generate_go_callback_signature(indy_function)
-    result_send = if length(indy_function.callback_parameters) > 2 do
-      "resCh <- #{Enum.at(indy_function.callback_parameters, 1)}"
-    else
-      "resCh <- #{generate_result(indy_function)}"
-    end
+  def generate_go_callback(indy_function = %{callback_parameters: [{_, first_param_name} | _ ]}, result_sending) do
+    {callback_name, callback_signature} = generate_go_callback_signature(indy_function)
+    export = "//export #{callback_name}"
+    resolver_call = "resCh, err := resolver.DeregisterCall(#{first_param_name})"
+    err_check = "if err != nil {\n\t\tpanic(fmt.Sprintf(\"Invalid handle in callback: %d\", #{first_param_name}))\n\n\t}"
+    "#{export}\n#{callback_signature} {\n\t#{resolver_call}\n\t#{err_check}\n\t#{result_sending}\n}"
   end
 
+  def generate_go_callback_signature(indy_function) do
+    callback_name =
+      indy_function.name
+      |> String.trim_leading("indy_")
+      |> Utils.snake_to_camel
+      |> Kernel.<>("Callback")
+      go_params = to_go_types(indy_function.callback_parameters)
+      go_params_string =
+        go_params
+        |> Enum.map(fn {type, name} -> {name, type} end)
+        |> Enum.map(fn {name, type} -> name <> " " <> type end)
+        |> Enum.join(", ")
+        {callback_name, "func #{callback_name} (#{go_params_string})"}
+  end
 
   defp params_c_to_go(params) do
     params
@@ -199,37 +214,16 @@ defmodule GoTranslator do
       {Map.fetch!(@c_to_go_types, type), name}
     end)
   end
-
-  def generate_go_callback_signature(indy_function) do
-    callback_name =
-      indy_function.name
-      |> String.trim_leading("indy_")
-      |> Utils.snake_to_camel
-    IO.puts("Callback name: #{inspect callback_name}")
-    go_params = to_go_types(indy_function.callback_parameters)
-    go_params_string =
-      go_params
-      |> Enum.map(fn {type, name} -> {name, type} end)
-      |> Enum.map(fn {name, type} -> name <> " " <> type end)
-      |> Enum.join(", ")
-    "func #{callback_name}(#{go_params_string})"
-  end
-
-  # TODO - private
-  def generate_result(indy_function) do
-    params = Enum.drop(indy_function.callback_parameters, 1)
-
-  end
 end
 
 
 defmodule Result do
-  def generate_strings(function_name, [_handle_param | params]) do
+  def generate_strings(%{name: name, callback_parameters: [_handle_param | params]}) do
     if length(params) > 1 do
       {
-        result_definition(function_name, params),
-        result_initialisation_and_sending(function_name, params),
-        result_retrieval_from_channel_struct(function_name, params)
+        result_definition(name, params),
+        result_initialisation_and_sending(name, params),
+        result_retrieval_from_channel_struct(name, params)
       }
     else
       [{param_type, param_name} = first | _] = params
@@ -275,4 +269,5 @@ defmodule Result do
   def result_struct_name(function_name) do
     "#{function_name}Result"
   end
+
 end
