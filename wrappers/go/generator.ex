@@ -10,6 +10,39 @@ defmodule Utils do
       first <> Enum.join(Enum.map(others, &String.capitalize/1))
     end).()
   end
+
+  def camel_to_snake(name) do
+    name
+    |> String.to_charlist
+    |> chunks(fn x -> x >= 97 end)
+    |> Enum.reject(fn x -> x == [] end)
+    |> Enum.map(&List.to_string/1)
+    |> Enum.map(&String.downcase/1)
+    |> Enum.join("_")
+  end
+
+  defp chunks(l, f, buffer \\ [], chunks \\ [])
+  defp chunks([], _f, buffer, chunks), do: Enum.reverse([buffer | chunks])
+  defp chunks(l, f, buffer, chunks) do
+    case Enum.split_while(l, f) do
+      {[], [first | rest]} -> chunks(rest, f, [first | buffer], chunks)
+      {chunk, rest} -> chunks(rest, f, [], [List.flatten([Enum.reverse(buffer) | chunk]) | chunks])
+    end
+  end
+
+
+  defp split_into_streaks(l, f, streaks \\ [], flag \\ false)
+  defp split_into_streaks([], _f, streaks, _flag), do: Enum.reverse(streaks)
+  defp split_into_streaks(l, f, streaks, true) do
+    {streak, rest} = Enum.split_while(l, fn x ->
+      not f.(x)
+    end)
+    split_into_streaks(rest, f, [streak | streaks], false)
+  end
+  defp split_into_streaks(l, f, streaks, false) do
+    {streak, rest} = Enum.split_while(l, f)
+    split_into_streaks(rest, f, [streak | streaks], true)
+  end
 end
 
 
@@ -135,6 +168,14 @@ defmodule GoTranslator do
     "const char*" => "*C.char",
     "char*" => "*C.char",
   }
+  @go_to_c_types %{
+    "string" => "*C.char"
+  }
+  @c_types_setup %{
+    "*C.char" => true,
+    "int32_t" => false,
+    "int32" => false,
+  }
 
   @test_f %IndyFunction{callback_parameters: [{"int32_t", "xcommand_handle"},
      {"enum", "err"}], name: "indy_create_wallet",
@@ -190,16 +231,62 @@ defmodule GoTranslator do
   def generate_go_callback_signature(indy_function) do
     callback_name =
       indy_function.name
-      |> String.trim_leading("indy_")
-      |> Utils.snake_to_camel
+      |> go_function_name
       |> Kernel.<>("Callback")
-      go_params = to_go_types(indy_function.callback_parameters)
-      go_params_string =
-        go_params
-        |> Enum.map(fn {type, name} -> {name, type} end)
-        |> Enum.map(fn {name, type} -> name <> " " <> type end)
-        |> Enum.join(", ")
-        {callback_name, "func #{callback_name} (#{go_params_string})"}
+    go_params = to_go_types(indy_function.callback_parameters)
+    callback_signature = generate_go_func_signature(callback_name, go_params)
+    {callback_name, callback_signature}
+  end
+
+  def generate_go_function(indy_function) do
+    go_indy_function = to_go_types_and_conventions(indy_function)
+    name = go_function_name(go_indy_function.name)
+    signature = generate_go_func_signature(name, go_indy_function.parameters)
+    register = "pointer, handle, resCh, err := resolver.RegisterCall(\"#{indy_function.name}\")"
+    register_err_check = "if err != nil {\n\t\treturn fmt.Errorf(\"Failed to register call: %s\", err)\n\t}"
+
+    IO.inspect go_indy_function
+    argument_setup = generate_argument_setup(go_indy_function.parameters)
+
+    "#{signature} {\n\t#{register}\n\t#{register_err_check}\n\n\t#{argument_setup}\n}"
+  end
+
+  defp generate_go_func_signature(func_name, params) do
+    params_string =
+      params
+      |> Enum.map(fn {type, name} -> name <> " " <> type end)
+      |> Enum.join(", ")
+    "func #{func_name}(#{params_string})"
+  end
+
+  defp generate_argument_setup(go_params) do
+    go_params
+    |> Enum.map(&go_var_setup/1)
+    |> Enum.join("\n\t")
+  end
+
+  defp go_var_setup({var_type, var_name}) do
+    c_var_name = "c_" <> Utils.camel_to_snake(var_name)
+    c_var_type = Map.get(@go_to_c_types, var_type, var_type)
+    var_declaration = "var #{c_var_name} #{c_var_type}"
+    if Map.fetch!(@c_types_setup, c_var_type) do
+      var_declaration <> "\n\t" <> c_type_setup(c_var_name, var_name, c_var_type)
+    else
+      var_declaration
+    end
+  end
+
+
+  defp c_type_setup(c_var_name, go_var_name, "*C.char") do
+    initialisation = "#{c_var_name} = C.CString(#{go_var_name})"
+    cleanup = "defer C.free(unsafe.Pointer(#{c_var_name}))"
+    "#{initialisation}\n\t#{cleanup}"
+  end
+
+  defp go_function_name(indy_function_name) do
+    indy_function_name
+    |> String.trim_leading("indy_")
+    |> Utils.snake_to_camel
   end
 
   defp params_c_to_go(params) do
